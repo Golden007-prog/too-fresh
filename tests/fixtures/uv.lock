@@ -1,0 +1,11 @@
+version = 1
+
+[[package]]
+name = "httpx"
+version = "0.28.1"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "myproj"
+version = "0.1.0"
+source = { editable = "." }

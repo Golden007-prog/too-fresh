@@ -1,0 +1,11 @@
+[[package]]
+name = "requests"
+version = "2.32.3"
+
+[[package]]
+name = "internal"
+version = "1.0.0"
+
+[package.source]
+type = "git"
+url = "https://example.com/x.git"

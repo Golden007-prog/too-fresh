@@ -1,0 +1,23 @@
+lockfileVersion: '9.0'
+
+importers:
+  .:
+    dependencies:
+      react:
+        specifier: ^18.2.0
+        version: 18.2.0
+
+packages:
+
+  '@babel/core@7.24.0':
+    resolution: {integrity: sha512-abc}
+
+  react@18.2.0:
+    resolution: {integrity: sha512-def}
+
+  react-dom@18.2.0(react@18.2.0):
+    resolution: {integrity: sha512-ghi}
+
+snapshots:
+
+  react@18.2.0: {}
