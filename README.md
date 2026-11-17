@@ -46,7 +46,7 @@ It walks the directory you give it (default `.`) and skips `node_modules`, `.ven
 ## Options
 
 ```
-too-fresh [paths...] [--days N] [--ignore NAME]... [--json] [--strict] [--changed-only [REF]]
+too-fresh [paths...] [--days N] [--ignore NAME]... [--json] [--strict] [--changed-only [REF]] [--config FILE]
 ```
 
 - `--days 3` changes the window. Decimals work, `--days 0.5` is 12 hours.
@@ -55,6 +55,18 @@ too-fresh [paths...] [--days N] [--ignore NAME]... [--json] [--strict] [--change
 - `--strict` also fails when a version can't be found on its registry (yanked, unpublished, or a typo). By default those are just listed.
 - `--changed-only` only checks versions that differ from a git ref, so a PR is judged on what it adds and not on the 1,600 packages already on main. With no ref it compares against the PR base in GitHub Actions (`origin/$GITHUB_BASE_REF`) and `HEAD` locally. A lockfile that's new in the diff counts as fully changed. It's also much faster on big lockfiles.
 - `TOO_FRESH_NPM_REGISTRY` points npm lookups at a mirror.
+
+### Config file
+
+So the whole team (and CI) uses the same settings, put them in `.too-fresh.toml` at the repo root, or under `[tool.too-fresh]` in `pyproject.toml`:
+
+```toml
+days = 3
+ignore = ["@myorg/*", "openai"]  # added to any --ignore flags
+strict = true
+```
+
+too-fresh looks in the current directory and its parents up to the git root. Flags win over the file, `--config FILE` picks a file explicitly, and an unknown key is an error rather than silently ignored.
 
 ## In CI
 

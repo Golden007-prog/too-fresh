@@ -7,6 +7,7 @@ import fnmatch
 import json
 import os
 import sys
+import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -59,6 +60,47 @@ def color(s: str, code: str) -> str:
     return f"\033[{code}m{s}\033[0m"
 
 
+CONFIG_KEYS = {"days": (int, float), "ignore": list, "strict": bool, "jobs": int}
+
+
+class ConfigError(Exception):
+    pass
+
+
+def load_config(explicit: str | None, cwd: Path) -> tuple[dict, Path | None]:
+    """Read .too-fresh.toml, or [tool.too-fresh] in pyproject.toml, from cwd or a parent."""
+    if explicit:
+        candidates = [Path(explicit)]
+    else:
+        candidates = []
+        for d in [cwd, *cwd.parents]:
+            candidates += [d / ".too-fresh.toml", d / "pyproject.toml"]
+            if (d / ".git").exists():
+                break
+    for path in candidates:
+        if not path.is_file():
+            if explicit:
+                raise ConfigError(f"{explicit}: no such file")
+            continue
+        try:
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+        except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+            raise ConfigError(f"{path}: {e}") from None
+        if path.name == "pyproject.toml":
+            if "too-fresh" not in data.get("tool", {}):
+                continue
+            data = data["tool"]["too-fresh"]
+        for key, value in data.items():
+            want = CONFIG_KEYS.get(key)
+            if want is None:
+                raise ConfigError(f"{path}: unknown key {key!r} (expected one of {', '.join(CONFIG_KEYS)})")
+            if not isinstance(value, want) or (want is int and isinstance(value, bool)) or \
+                    (key == "ignore" and not all(isinstance(v, str) for v in value)):
+                raise ConfigError(f"{path}: {key!r} has the wrong type")
+        return data, path
+    return {}, None
+
+
 def default_base_ref() -> str:
     base = os.environ.get("GITHUB_BASE_REF")
     return f"origin/{base}" if base else "HEAD"
@@ -70,21 +112,35 @@ def main(argv: list[str] | None = None, registry: Registry | None = None, now: d
         description="Find dependencies in your lockfiles that were published in the last N days.",
     )
     ap.add_argument("paths", nargs="*", default=["."], help="lockfiles or directories to scan (default: .)")
-    ap.add_argument("-d", "--days", type=float, default=7, help="minimum age in days (default: 7, decimals ok)")
+    ap.add_argument("-d", "--days", type=float, help="minimum age in days (default: 7, decimals ok)")
     ap.add_argument("-i", "--ignore", action="append", default=[], metavar="NAME",
                     help="package name or glob to skip, e.g. '@myorg/*' (repeatable)")
     ap.add_argument("--json", action="store_true", help="print JSON instead of a table")
-    ap.add_argument("--strict", action="store_true", help="also fail when a version can't be found on its registry")
-    ap.add_argument("-j", "--jobs", type=int, default=32, help="parallel registry lookups (default: 32)")
+    ap.add_argument("--strict", action="store_true", default=None, help="also fail when a version can't be found on its registry")
+    ap.add_argument("-j", "--jobs", type=int, help="parallel registry lookups (default: 32)")
     ap.add_argument("--changed-only", nargs="?", const="", metavar="REF",
                     help="only check versions that differ from git REF (default: the PR base in "
                          "GitHub Actions, else HEAD)")
+    ap.add_argument("-c", "--config", metavar="FILE",
+                    help="config file (default: .too-fresh.toml or [tool.too-fresh] in pyproject.toml)")
     ap.add_argument("-V", "--version", action="version", version=f"too-fresh {__version__}")
     args = ap.parse_args(argv)
 
+    try:
+        config, _ = load_config(args.config, Path.cwd())
+    except ConfigError as e:
+        print(f"too-fresh: config: {e}", file=sys.stderr)
+        return 2
+    if args.days is None:
+        args.days = float(config.get("days", 7))
+    if args.strict is None:
+        args.strict = config.get("strict", False)
+    if args.jobs is None:
+        args.jobs = config.get("jobs", 32)
+
     registry = registry or Registry()
     now = now or datetime.now(timezone.utc)
-    ignore = args.ignore + [p.strip() for p in os.environ.get("TOO_FRESH_IGNORE", "").split(",") if p.strip()]
+    ignore = args.ignore + config.get("ignore", []) + [p.strip() for p in os.environ.get("TOO_FRESH_IGNORE", "").split(",") if p.strip()]
 
     files: list[Path] = []
     for p in args.paths:

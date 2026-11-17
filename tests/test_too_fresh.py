@@ -213,6 +213,50 @@ class CliTests(unittest.TestCase):
         self.assertIn("no lockfiles", err)
 
 
+class ConfigTests(unittest.TestCase):
+    def run_in(self, d, argv, routes=CliTests.ROUTES):
+        old = os.getcwd()
+        os.chdir(d)
+        try:
+            return CliTests.run_cli(self, argv, routes)
+        finally:
+            os.chdir(old)
+
+    def test_too_fresh_toml_sets_days_and_ignore(self):
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, ".git").mkdir()
+            Path(d, ".too-fresh.toml").write_text('days = 0.5\n')
+            code, out, _ = self.run_in(d, [str(FX / "uv.lock")])
+            self.assertEqual(code, 0)
+            self.assertIn("Minimum age: 0.5 days", out)
+            Path(d, ".too-fresh.toml").write_text('ignore = ["http*"]\n')
+            code, out, _ = self.run_in(d, [str(FX / "uv.lock")])
+            self.assertEqual(code, 0)
+            self.assertIn("1 ignored", out)
+
+    def test_cli_flag_beats_config_and_parent_dir_found(self):
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, ".git").mkdir()
+            Path(d, "pyproject.toml").write_text('[tool.too-fresh]\ndays = 0.5\n')
+            sub = Path(d, "sub")
+            sub.mkdir()
+            code, out, _ = self.run_in(sub, [str(FX / "uv.lock")])
+            self.assertEqual(code, 0)
+            code, _, _ = self.run_in(sub, [str(FX / "uv.lock"), "--days", "7"])
+            self.assertEqual(code, 1)
+
+    def test_bad_config_exits_2(self):
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, ".git").mkdir()
+            Path(d, ".too-fresh.toml").write_text('dayz = 3\n')
+            code, _, err = self.run_in(d, [str(FX / "uv.lock")])
+            self.assertEqual(code, 2)
+            self.assertIn("unknown key 'dayz'", err)
+            code, _, err = self.run_in(d, [str(FX / "uv.lock"), "--config", str(Path(d, "nope.toml"))])
+            self.assertEqual(code, 2)
+            self.assertIn("no such file", err)
+
+
 if __name__ == "__main__":
     unittest.main()
 
