@@ -1,0 +1,14 @@
+{
+    "_readme": ["This file locks the dependencies of your project to a known state"],
+    "content-hash": "0000",
+    "packages": [
+        {"name": "monolog/monolog", "version": "3.7.0", "source": {"type": "git", "url": "https://github.com/Seldaek/monolog.git"}, "dist": {"type": "zip", "url": "https://api.github.com/repos/Seldaek/monolog/zipball/abc"}, "time": "2024-06-28T09:40:51+00:00"},
+        {"name": "acme/local-thing", "version": "1.0.0", "dist": {"type": "path", "url": "../local-thing"}},
+        {"name": "acme/edge", "version": "dev-main", "source": {"type": "git", "url": "https://github.com/acme/edge.git"}}
+    ],
+    "packages-dev": [
+        {"name": "phpunit/phpunit", "version": "v11.4.3", "dist": {"type": "zip", "url": "https://api.github.com/repos/sebastianbergmann/phpunit/zipball/def"}}
+    ],
+    "aliases": [],
+    "minimum-stability": "stable"
+}

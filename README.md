@@ -38,6 +38,8 @@ Exit code is 1 when something is too fresh, 0 when it's all fine, 2 when it foun
 | `uv.lock`, `poetry.lock`, `requirements*.txt` (pinned `==` lines) | PyPI |
 | `Cargo.lock` | crates.io |
 | `go.sum` | proxy.golang.org |
+| `composer.lock` | Packagist (path repos and `dev-` branches skipped) |
+| `Gemfile.lock`, `gems.locked` | rubygems.org (only `GEM` sections from rubygems.org; platform gems like `nokogiri 1.16.7-x86_64-linux` looked up per platform) |
 
 It walks the directory you give it (default `.`) and skips `node_modules`, `.venv`, `target` and other usual suspects. Git, path, workspace and private-index dependencies are skipped, since there's no public publish date to check.
 
@@ -91,7 +93,7 @@ It doesn't look for CVEs (use [osv-scanner](https://github.com/google/osv-scanne
 
 ## How it works
 
-Plain Python standard library, no dependencies, so there's not much to audit. It parses each lockfile, dedupes, then makes one request per package (npm) or per version (PyPI, crates.io, Go proxy), 32 at a time. A 1,700 package pnpm monorepo takes about 40 seconds. Nothing is sent anywhere except those public registry lookups.
+Plain Python standard library, no dependencies, so there's not much to audit. It parses each lockfile, dedupes, then makes one request per package (npm, Packagist) or per version (PyPI, crates.io, Go proxy, RubyGems), 32 at a time. A 1,700 package pnpm monorepo takes about 40 seconds. Nothing is sent anywhere except those public registry lookups.
 
 ## Development
 

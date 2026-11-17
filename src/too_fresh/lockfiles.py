@@ -14,7 +14,7 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class Dep:
-    ecosystem: str  # npm, pypi, crates, go
+    ecosystem: str  # npm, pypi, crates, go, packagist, rubygems
     name: str
     version: str
     source: str  # lockfile path it came from
@@ -191,6 +191,40 @@ def parse_go_sum(path: Path) -> list[Dep]:
     return out
 
 
+def parse_composer_lock(path: Path) -> list[Dep]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    out = []
+    for p in (data.get("packages") or []) + (data.get("packages-dev") or []):
+        name, version = p.get("name", ""), p.get("version", "")
+        if not name or "/" not in name or version.startswith("dev-") or version.endswith("-dev"):
+            continue
+        if (p.get("dist") or {}).get("type") == "path":
+            continue
+        out.append(Dep("packagist", name, version, str(path)))
+    return out
+
+
+def parse_gemfile_lock(path: Path) -> list[Dep]:
+    out = []
+    section = remote = ""
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line and not line[0].isspace():
+            section, remote = line.strip(), ""
+            continue
+        if section != "GEM":
+            continue
+        m = re.match(r"^  remote: (\S+)", line)
+        if m:
+            remote = m.group(1)
+            continue
+        m = re.match(r"^    ([A-Za-z0-9_.-]+) \(([^)\s]+)\)$", line)  # 4 spaces: a gem; 6 spaces: its deps
+        if m and "rubygems.org" in remote:
+            version = m.group(2)
+            # platform gems look like 1.15.4-x86_64-linux; gem versions never contain "-"
+            out.append(Dep("rubygems", m.group(1), version, str(path)))
+    return out
+
+
 PARSERS = {
     "package-lock.json": parse_package_lock,
     "npm-shrinkwrap.json": parse_package_lock,
@@ -201,6 +235,9 @@ PARSERS = {
     "poetry.lock": parse_poetry_lock,
     "Cargo.lock": parse_cargo_lock,
     "go.sum": parse_go_sum,
+    "composer.lock": parse_composer_lock,
+    "Gemfile.lock": parse_gemfile_lock,
+    "gems.locked": parse_gemfile_lock,
 }
 
 

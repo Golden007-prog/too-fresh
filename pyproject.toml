@@ -5,13 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "too-fresh"
 dynamic = ["version"]
-description = "Find dependencies in your lockfiles that were published too recently to trust. npm, pnpm, yarn, bun, uv, poetry, pip, cargo, go."
+description = "Find dependencies in your lockfiles that were published too recently to trust. npm, pnpm, yarn, bun, uv, poetry, pip, cargo, go, composer, bundler."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
 authors = [{ name = "Tanbir Hossain Ramim" }]
-keywords = ["supply-chain", "security", "lockfile", "npm", "pypi", "cargo", "cooldown", "dependencies", "ci"]
+keywords = ["supply-chain", "security", "lockfile", "npm", "pypi", "cargo", "composer", "rubygems", "cooldown", "dependencies", "ci"]
 classifiers = [
   "Environment :: Console",
   "Intended Audience :: Developers",

@@ -67,6 +67,15 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(names(lf.parse_cargo_lock(FX / "Cargo.lock")), [("crates", "serde", "1.0.210")])
         self.assertEqual(names(lf.parse_go_sum(FX / "go.sum")), [("go", "github.com/BurntSushi/toml", "v1.4.0")])
 
+    def test_composer_lock(self):
+        self.assertEqual(names(lf.parse_composer_lock(FX / "composer.lock")), [
+            ("packagist", "monolog/monolog", "3.7.0"), ("packagist", "phpunit/phpunit", "v11.4.3")])
+
+    def test_gemfile_lock_only_rubygems_org(self):
+        self.assertEqual(names(lf.parse_gemfile_lock(FX / "Gemfile.lock")), [
+            ("rubygems", "nokogiri", "1.16.7-x86_64-linux"), ("rubygems", "racc", "1.8.1"), ("rubygems", "rack", "3.1.8")])
+        self.assertIs(lf.parser_for(Path("gems.locked")), lf.parse_gemfile_lock)
+
     def test_find_lockfiles_skips_node_modules(self):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "node_modules" / "x").mkdir(parents=True)
@@ -119,6 +128,26 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(r.published("crates", "serde", "1.0.210").year, 2024)
         self.assertEqual(r.published("go", "github.com/BurntSushi/toml", "v1.4.0").month, 6)
         self.assertIsNone(r.published("npm", "missing", "1.0.0"))
+
+    def test_packagist_minified_metadata(self):
+        fetch = FakeFetch({"https://repo.packagist.org/p2/phpunit/phpunit.json": {"minified": "composer/2.0", "packages": {"phpunit/phpunit": [
+            {"name": "phpunit/phpunit", "version": "11.5.0", "time": "2026-11-15T08:00:00+00:00", "license": ["BSD-3-Clause"]},
+            {"version": "11.4.3", "time": "2024-10-28T13:07:50+00:00"},
+        ]}}})
+        r = Registry(fetch)
+        self.assertEqual(r.published("packagist", "phpunit/phpunit", "v11.4.3"), datetime(2024, 10, 28, 13, 7, 50, tzinfo=timezone.utc))
+        self.assertEqual(r.published("packagist", "phpunit/phpunit", "11.5.0").day, 15)
+        self.assertIsNone(r.published("packagist", "phpunit/phpunit", "9.9.9"))
+        self.assertEqual(len(fetch.calls), 1)
+
+    def test_rubygems_platform_gem(self):
+        fetch = FakeFetch({
+            "https://rubygems.org/api/v2/rubygems/nokogiri/versions/1.16.7.json?platform=x86_64-linux": {"version_created_at": "2024-07-27T16:44:00.000Z"},
+            "https://rubygems.org/api/v2/rubygems/rack/versions/3.1.8.json": {"version_created_at": "2026-11-16T09:00:00.000Z"},
+        })
+        r = Registry(fetch)
+        self.assertEqual(r.published("rubygems", "nokogiri", "1.16.7-x86_64-linux").year, 2024)
+        self.assertEqual(r.published("rubygems", "rack", "3.1.8"), datetime(2026, 11, 16, 9, tzinfo=timezone.utc))
 
     def test_npm_packument_cached_per_name(self):
         fetch = FakeFetch({"https://registry.npmjs.org/a": {"time": {"1.0.0": "2020-01-01T00:00:00Z", "2.0.0": "2021-01-01T00:00:00Z"}}})

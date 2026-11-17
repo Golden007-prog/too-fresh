@@ -48,6 +48,7 @@ class Registry:
     def __init__(self, fetch: Fetch = http_json):
         self.fetch = fetch
         self._npm_cache: dict[str, object] = {}
+        self._packagist_cache: dict[str, object] = {}
         self.npm_base = os.environ.get("TOO_FRESH_NPM_REGISTRY", "https://registry.npmjs.org").rstrip("/")
 
     def published(self, ecosystem: str, name: str, version: str) -> datetime | None:
@@ -74,4 +75,24 @@ class Registry:
         esc = "".join("!" + c.lower() if c.isupper() else c for c in module)
         doc = self.fetch(f"https://proxy.golang.org/{esc}/@v/{version}.info", {})
         t = (doc or {}).get("Time")
+        return parse_time(t) if t else None
+
+    def _packagist(self, name: str, version: str):
+        if name not in self._packagist_cache:
+            self._packagist_cache[name] = self.fetch(f"https://repo.packagist.org/p2/{name}.json", {})
+        doc = self._packagist_cache[name]
+        current: dict = {}
+        want = version.lstrip("v")
+        for entry in ((doc or {}).get("packages") or {}).get(name, []):
+            # composer/2.0 minified metadata: each entry only lists what changed since the previous one
+            current = {**current, **entry}
+            if str(current.get("version", "")).lstrip("v") == want and current.get("time"):
+                return parse_time(current["time"])
+        return None
+
+    def _rubygems(self, name: str, version: str):
+        number, _, platform = version.partition("-")
+        query = f"?platform={urllib.parse.quote(platform)}" if platform else ""
+        doc = self.fetch(f"https://rubygems.org/api/v2/rubygems/{urllib.parse.quote(name)}/versions/{urllib.parse.quote(number)}.json{query}", {})
+        t = (doc or {}).get("version_created_at") or (doc or {}).get("created_at")
         return parse_time(t) if t else None
