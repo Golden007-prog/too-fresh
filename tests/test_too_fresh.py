@@ -1,8 +1,11 @@
 import io
 import json
+import os
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -183,3 +186,60 @@ class CliTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ChangedOnlyTests(unittest.TestCase):
+    def git(self, *args):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", *args],
+                       cwd=self.repo, check=True, capture_output=True)
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self._tmp.name)
+        self.git("init", "-q")
+        (self.repo / "requirements.txt").write_text("httpx==0.27.0\nrich==13.0.0\n")
+        self.git("add", ".")
+        self.git("commit", "-qm", "base")
+        (self.repo / "requirements.txt").write_text("httpx==0.28.1\nrich==13.0.0\n")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def run_cli(self, argv):
+        fresh = {"urls": [{"upload_time_iso_8601": (NOW - timedelta(hours=3)).isoformat()}]}
+        routes = {"https://pypi.org/pypi/httpx/0.28.1/json": fresh, "https://pypi.org/pypi/rich/13.0.0/json": fresh}
+        fetch = FakeFetch(routes)
+        out, err = io.StringIO(), io.StringIO()
+        env = {k: v for k, v in os.environ.items() if k != "GITHUB_BASE_REF"}
+        with redirect_stdout(out), redirect_stderr(err), mock.patch.dict(os.environ, env, clear=True):
+            code = main(argv, registry=Registry(fetch), now=NOW)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_only_changed_versions_are_checked(self):
+        code, out, _ = self.run_cli([str(self.repo), "--changed-only", "--json"])
+        data = json.loads(out)
+        self.assertEqual(code, 1)
+        self.assertEqual(data["checked"], 1)
+        self.assertEqual([f["name"] for f in data["fresh"]], ["httpx"])
+
+    def test_new_lockfile_counts_as_all_changed(self):
+        (self.repo / "sub").mkdir()
+        (self.repo / "sub" / "requirements.txt").write_text("rich==13.0.0\n")
+        code, out, _ = self.run_cli([str(self.repo / "sub"), "--changed-only", "HEAD", "--json"])
+        self.assertEqual(json.loads(out)["checked"], 1)
+
+    def test_unchanged_tree_checks_nothing(self):
+        self.git("commit", "-qam", "bump")
+        code, out, _ = self.run_cli([str(self.repo), "--changed-only"])
+        self.assertEqual(code, 0)
+        self.assertIn("0 packages", out)
+
+    def test_bad_ref_exits_2(self):
+        code, _, err = self.run_cli([str(self.repo), "--changed-only", "nope"])
+        self.assertEqual(code, 2)
+        self.assertIn("nope", err)
+
+    def test_default_ref_uses_pr_base_in_actions(self):
+        with mock.patch.dict(os.environ, {"GITHUB_BASE_REF": "main"}):
+            from too_fresh.cli import default_base_ref
+            self.assertEqual(default_base_ref(), "origin/main")

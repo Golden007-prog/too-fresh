@@ -44,13 +44,14 @@ It walks the directory you give it (default `.`) and skips `node_modules`, `.ven
 ## Options
 
 ```
-too-fresh [paths...] [--days N] [--ignore NAME]... [--json] [--strict]
+too-fresh [paths...] [--days N] [--ignore NAME]... [--json] [--strict] [--changed-only [REF]]
 ```
 
 - `--days 3` changes the window. Decimals work, `--days 0.5` is 12 hours.
 - `--ignore '@myorg/*' --ignore openai` skips your own packages or a bump you've already looked at. `TOO_FRESH_IGNORE=a,b` does the same from the environment.
 - `--json` for scripts.
 - `--strict` also fails when a version can't be found on its registry (yanked, unpublished, or a typo). By default those are just listed.
+- `--changed-only` only checks versions that differ from a git ref, so a PR is judged on what it adds and not on the 1,600 packages already on main. With no ref it compares against the PR base in GitHub Actions (`origin/$GITHUB_BASE_REF`) and `HEAD` locally. A lockfile that's new in the diff counts as fully changed. It's also much faster on big lockfiles.
 - `TOO_FRESH_NPM_REGISTRY` points npm lookups at a mirror.
 
 ## In CI
@@ -69,6 +70,17 @@ Anywhere else with Python 3.11+:
 
 ```sh
 pipx run too-fresh --days 7
+```
+
+On pull requests you probably only care about what the PR changes:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+- uses: TanbirRamim/too-fresh@main
+  with:
+    changed-only: true
 ```
 
 A nice pattern is running it only on PRs that touch a lockfile, so Renovate or Dependabot bumps sit for a week before they can merge, and an urgent security fix gets an explicit `--ignore` in the PR where everyone can see it.

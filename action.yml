@@ -13,6 +13,9 @@ inputs:
   ignore:
     description: Comma separated package names or globs to allow
     default: ""
+  changed-only:
+    description: Only check versions this PR changes (needs the base branch fetched, e.g. fetch-depth 0)
+    default: "false"
 runs:
   using: composite
   steps:
@@ -24,4 +27,6 @@ runs:
         TOO_FRESH_IGNORE: ${{ inputs.ignore }}
       run: |
         pip install --quiet "${{ github.action_path }}"
-        too-fresh ${{ inputs.paths }} --days "${{ inputs.days }}"
+        extra=()
+        if [ "${{ inputs.changed-only }}" = "true" ]; then extra+=(--changed-only); fi
+        too-fresh ${{ inputs.paths }} --days "${{ inputs.days }}" "${extra[@]}"

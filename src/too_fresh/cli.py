@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import __version__
-from .lockfiles import Dep, collect, find_lockfiles
+from .lockfiles import Dep, GitError, base_versions, collect, find_lockfiles
 from .registries import Registry
 
 
@@ -59,6 +59,11 @@ def color(s: str, code: str) -> str:
     return f"\033[{code}m{s}\033[0m"
 
 
+def default_base_ref() -> str:
+    base = os.environ.get("GITHUB_BASE_REF")
+    return f"origin/{base}" if base else "HEAD"
+
+
 def main(argv: list[str] | None = None, registry: Registry | None = None, now: datetime | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="too-fresh",
@@ -71,6 +76,9 @@ def main(argv: list[str] | None = None, registry: Registry | None = None, now: d
     ap.add_argument("--json", action="store_true", help="print JSON instead of a table")
     ap.add_argument("--strict", action="store_true", help="also fail when a version can't be found on its registry")
     ap.add_argument("-j", "--jobs", type=int, default=32, help="parallel registry lookups (default: 32)")
+    ap.add_argument("--changed-only", nargs="?", const="", metavar="REF",
+                    help="only check versions that differ from git REF (default: the PR base in "
+                         "GitHub Actions, else HEAD)")
     ap.add_argument("-V", "--version", action="version", version=f"too-fresh {__version__}")
     args = ap.parse_args(argv)
 
@@ -90,6 +98,14 @@ def main(argv: list[str] | None = None, registry: Registry | None = None, now: d
         return 2
 
     deps, parse_errors = collect(files)
+    if args.changed_only is not None:
+        ref = args.changed_only or default_base_ref()
+        try:
+            before = base_versions(files, ref)
+        except (GitError, OSError) as e:
+            print(f"too-fresh: --changed-only: {e}", file=sys.stderr)
+            return 2
+        deps = [d for d in deps if (d.ecosystem, d.name, d.version) not in before]
     unique, checked, fresh, unknown = check(deps, registry, now, timedelta(days=args.days), ignore, args.jobs)
     failed = bool(fresh) or (args.strict and bool(unknown))
 
@@ -108,8 +124,9 @@ def main(argv: list[str] | None = None, registry: Registry | None = None, now: d
 
     for e in parse_errors:
         print(color(f"warning: {e}", "33"), file=sys.stderr)
+    changed_note = f", only changed since {args.changed_only or default_base_ref()}" if args.changed_only is not None else ""
     print(f"Scanned {len(files)} lockfile{'s' * (len(files) != 1)}, {len(checked)} package{'s' * (len(checked) != 1)} "
-          f"({len(unique) - len(checked)} ignored). Minimum age: {args.days:g} days.\n")
+          f"({len(unique) - len(checked)} ignored){changed_note}. Minimum age: {args.days:g} days.\n")
     if fresh:
         w = max(len(f"{d.name}@{d.version}") for d, _ in fresh)
         for d, when in fresh:

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
+import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -232,3 +234,36 @@ def collect(paths: list[Path]) -> tuple[list[Dep], list[str]]:
         except Exception as e:  # a broken lockfile shouldn't hide the others
             errors.append(f"{p}: could not parse ({e})")
     return deps, errors
+
+
+class GitError(Exception):
+    pass
+
+
+def base_versions(lockfiles: list[Path], ref: str) -> set[tuple[str, str, str]]:
+    """(ecosystem, name, version) pinned by the same lockfiles at git ref `ref`.
+
+    A lockfile that didn't exist at `ref` contributes nothing, so everything in it counts as changed.
+    """
+    seen: set[tuple[str, str, str]] = set()
+    checked_dirs: set[Path] = set()
+    with tempfile.TemporaryDirectory() as tmp:
+        for i, f in enumerate(lockfiles):
+            cwd = f.resolve().parent
+            if cwd not in checked_dirs:
+                ok = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+                                    cwd=cwd, capture_output=True, check=False)
+                if ok.returncode != 0:
+                    raise GitError(f"can't resolve git ref '{ref}' from {cwd} (is it fetched?)")
+                checked_dirs.add(cwd)
+            old = subprocess.run(["git", "show", f"{ref}:./{f.name}"], cwd=cwd, capture_output=True, check=False)
+            if old.returncode != 0:
+                continue
+            copy = Path(tmp, str(i), f.name)
+            copy.parent.mkdir()
+            copy.write_bytes(old.stdout)
+            try:
+                seen.update((d.ecosystem, d.name, d.version) for d in parser_for(copy)(copy))
+            except Exception:
+                pass  # unparseable old version: treat the whole file as changed
+    return seen
