@@ -108,7 +108,7 @@ def main(argv: list[str] | None = None, registry: Registry | None = None, now: d
 
     for e in parse_errors:
         print(color(f"warning: {e}", "33"), file=sys.stderr)
-    print(f"Scanned {len(files)} lockfile{'s' * (len(files) != 1)}, {len(checked)} package{"s" * (len(checked) != 1)} "
+    print(f"Scanned {len(files)} lockfile{'s' * (len(files) != 1)}, {len(checked)} package{'s' * (len(checked) != 1)} "
           f"({len(unique) - len(checked)} ignored). Minimum age: {args.days:g} days.\n")
     if fresh:
         w = max(len(f"{d.name}@{d.version}") for d, _ in fresh)
