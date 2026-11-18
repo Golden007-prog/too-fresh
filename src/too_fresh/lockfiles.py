@@ -164,9 +164,10 @@ def parse_pipfile_lock(path: Path) -> list[Dep]:
     data = json.loads(path.read_text(encoding="utf-8"))
     sources = data.get("_meta", {}).get("sources", [])
     default_index = sources[0]["name"] if sources else "pypi"
+    # A source URL may be missing or use ${ENV_VAR} placeholders; treat those as private indexes.
     pypi_indexes = {
-        source["name"] for source in sources
-        if urlsplit(source["url"]).hostname in {"pypi.org", "pypi.python.org"}
+        source.get("name") for source in sources
+        if urlsplit(source.get("url") or "").hostname in {"pypi.org", "pypi.python.org"}
     } if sources else {"pypi"}
     out = []
     for group in ("default", "develop"):
