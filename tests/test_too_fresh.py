@@ -63,6 +63,13 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(names(lf.parse_requirements(FX / "requirements.txt")), [
             ("pypi", "Django", "5.1.2"), ("pypi", "uvicorn", "0.30.0")])
 
+    def test_pipfile_lock(self):
+        path = FX / "Pipfile.lock"
+        deps, errors = lf.collect([path])
+        self.assertEqual(errors, [])
+        self.assertEqual(names(deps), [("pypi", "pytest", "8.3.3"), ("pypi", "requests", "2.32.3")])
+        self.assertTrue(all(dep.source == str(path) for dep in deps))
+
     def test_cargo_and_go(self):
         self.assertEqual(names(lf.parse_cargo_lock(FX / "Cargo.lock")), [("crates", "serde", "1.0.210")])
         self.assertEqual(names(lf.parse_go_sum(FX / "go.sum")), [("go", "github.com/BurntSushi/toml", "v1.4.0")])
